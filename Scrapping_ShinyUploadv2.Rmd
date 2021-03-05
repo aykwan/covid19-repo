@@ -1,0 +1,60 @@
+---
+title: <center>COVID-19 Scrapping v2</center>
+output:
+  html_document:
+    df_print: paged
+---
+<center> <h3>Deployed by Andy Kwan - 07/19/20</h3> </center>
+---
+Many thanks to:
+[ECDC](https://www.ecdc.europa.eu/en/publications-data/download-todays-data-geographic-distribution-covid-19-cases-worldwide) &
+[CradletoGraveR's Tutorial Video](https://www.youtube.com/watch?v=M5tSC3u1lkw)
+
+
+```{r echo=FALSE, results='hide'}
+#load libraries
+library(utils)
+library(httr)
+library(dplyr)
+library(ggplot2)
+library(shiny)
+
+#pull data from the ECDC website
+GET("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", authenticate(":",":", type="ntlm"), write_disk(tf <- tempfile(fileext = ".csv")))
+
+#store data into a variable
+data <- read.csv(tf)
+```
+
+Putting it into 2 graphs.
+
+```{r echo=FALSE}
+#pipe it by function; get the death rate per countries & territories and add as a new column to edf
+edf <- data %>% group_by(countriesAndTerritories) %>% mutate(deathRate=sum(data$deaths)/sum(cases))
+
+ui <- fluidPage(
+  mainPanel(plotOutput("plot"), plotOutput("plot2"))
+  #mainPanel(fluidRow(splitLayout(plotOutput("plot"), plotOutput("plot2"))))
+)
+
+server <- function(input, output, session) {
+  output$plot <- renderPlot({
+    edf %>% filter(deaths > 100) %>% 
+    group_by(countriesAndTerritories) %>% 
+    summarise(Deaths_Total = sum(deaths)) %>%
+    ggplot(aes(x = reorder(countriesAndTerritories, Deaths_Total))) +
+    geom_bar(stat="identity",aes(y= Deaths_Total)) + scale_y_continuous(labels = scales::comma) + ggtitle(paste("Current Confirmed Number of Death as of", Sys.Date())) + 
+    geom_text(aes(label = scales::comma(Deaths_Total), y = Deaths_Total, hjust = -0.25)) + coord_flip() + ylab("Deaths") + xlab("Countries")
+  })
+  output$plot2 <- renderPlot({
+    edf %>%  filter(deaths > 100) %>% 
+    group_by(countriesAndTerritories) %>% 
+    summarise(Cases_Total = sum(cases)) %>% 
+    ggplot(aes(x= reorder(countriesAndTerritories, Cases_Total))) +
+    geom_bar(stat="identity",aes(y = Cases_Total)) + scale_y_continuous(labels = scales::comma) + geom_text(aes(label= scales::comma(Cases_Total), y = Cases_Total, hjust = -0.25)) +
+    coord_flip() + ggtitle(paste("Current Confirmed Number of Cases as of", Sys.Date())) + ylab("Confirmed Cases") + xlab("Countries")
+  })
+}
+
+shinyApp(ui, server)
+```
